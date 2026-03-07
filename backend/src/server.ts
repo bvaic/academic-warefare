@@ -16,7 +16,7 @@ app.use(express.json()); // Allows the server to parse JSON request bodies
 
 // --- REDIS SETUP ---
 const redisClient = createClient({
-    url: process.env.REDIS_URL
+    url: process.env.REDIS_URL!
 });
 redisClient.on('error', (err) => console.error('Redis Client Error:', err));
 
@@ -24,7 +24,7 @@ redisClient.on('error', (err) => console.error('Redis Client Error:', err));
 async function connectInfrastructure() {
     try {
         // 1. Connect to MongoDB
-        await mongoose.connect(process.env.MONGO_URI);
+        await mongoose.connect(process.env.MONGO_URI!);
         console.log('✅ Connected to MongoDB successfully.');
 
         // 2. Connect to Redis
@@ -41,7 +41,7 @@ async function connectInfrastructure() {
         }
 
     } catch (error) {
-        console.error('❌ Failed to connect to infrastructure via VPN:', error.message);
+        console.error('❌ Failed to connect to infrastructure via VPN:', error);
     }
 }
 
@@ -59,7 +59,7 @@ app.get('/', (req, res) => {
 });
 
 // --- START SERVER ---
-app.listen(port, '0.0.0.0', async () => {
+app.listen('0.0.0.0', async (port) => {
     console.log(`🚀 Server listening on port ${port}`);
     // Boot up the infrastructure connections right after the server starts listening
     await connectInfrastructure();
