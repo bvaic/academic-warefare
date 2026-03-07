@@ -1,7 +1,5 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    
     // File Layout
     "rootDir": "./src",
     "outDir": "./dist",
@@ -10,8 +8,9 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "esnext",
-    "types": ["node"],
     "lib": ["esnext"],
+    "esModuleInterop": true, // Crucial for Express/CORS compatibility
+    "skipLibCheck": true,
 
     // Other Outputs
     "sourceMap": true,
@@ -19,15 +18,18 @@
     "declarationMap": true,
 
     // Stricter Typechecking Options
+    "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
-    // Recommended Options
-    "strict": true,
-    "verbatimModuleSyntax": true,
+    // Compatibility & Modernity
     "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
-  }
+
+    // Changing this to false or removing it makes development
+    // easier unless you want to be EXTREMELY pedantic about extensions.
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
