@@ -6,12 +6,19 @@ export interface IUser {
   name: string;
   pwd: string;
   course_list: string[];
+  professor_list: string[];
+}
+
+export interface ILeaderboardEntry {
+    user: string;
+    score: number;
 }
 
 export interface ICourse {
   _id: string;
   name: string;
-  leaderboard: any[];
+  course_name: string;
+  leaderboard: ILeaderboardEntry[];
   prof_id: string;
 }
 
@@ -46,13 +53,22 @@ const UserSchema = new Schema({
   _id: { type: String, required: true },
   name: { type: String, required: true },
   pwd: { type: String, required: true },
-  course_list: [{ type: String, ref: 'Course' }]
+  course_list: [{ type: Schema.Types.ObjectId, ref: 'Course' }],
+  professor_list: [{ type: Schema.Types.ObjectId, ref: 'Professor'}]
 }, { _id: false });
 
 const CourseSchema = new Schema({
   _id: { type: String, required: true },
   name: { type: String, required: true },
-  leaderboard: [Schema.Types.Mixed],
+  course_name: { type: String, required: true },
+  leaderboard: [{
+    user: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    score: { type: Number, default: 0 }
+  }],
   prof_id: { type: String, ref: 'Professor', required: true }
 }, { _id: false });
 
