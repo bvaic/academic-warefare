@@ -59,7 +59,7 @@ app.get('/', (req, res) => {
 });
 
 // --- START SERVER ---
-app.listen('0.0.0.0', async (port) => {
+app.listen(port as number, '0.0.0.0', async () => {
     console.log(`🚀 Server listening on port ${port}`);
     // Boot up the infrastructure connections right after the server starts listening
     await connectInfrastructure();
