@@ -379,13 +379,20 @@ io.on('connect', (socket) => {
         const room = rooms.get(data.roomCode);
         if (!room) return;
 
-        // Turn guard
+        // Strict Turn Guard: immediately return if not player's turn
         if (socket.id !== room.players[room.currentTurn].id) {
             return socket.emit('error', 'Not your turn!');
         }
 
         const opponentIndex = (room.currentTurn + 1) % 2;
         const opponent = room.players[opponentIndex];
+        
+        // Prevent firing at same spot twice (optional but good for stability)
+        const attacker = room.players[room.currentTurn];
+        const alreadyFired = attacker.hitCoordinates.some(c => c.x === data.x && c.y === data.y) || 
+                            attacker.missCoordinates.some(c => c.x === data.x && c.y === data.y);
+        if (alreadyFired) return socket.emit('error', 'Already fired at this location.');
+
         const isHit = opponent.ships.some(s => s.x === data.x && s.y === data.y);
 
         if (isHit) {
@@ -399,19 +406,21 @@ io.on('connect', (socket) => {
             io.to(data.roomCode).emit('combat_triggered', {
                 targetId: socket.id, // The one who must answer
                 question: randomQ,
-                coordinate: { x: data.x, y: data.y }
+                coordinate: { x: data.x, y: data.y },
+                sourceMaterial: randomQ.explanation // The Proof: send as Source Material
             });
         } else {
-            // Miss
-            const attacker = room.players[room.currentTurn];
+            // Miss logic: swap turn FIRST, then broadcast
             attacker.missCoordinates.push({ x: data.x, y: data.y });
-            
             room.currentTurn = opponentIndex;
+            
             io.to(data.roomCode).emit('fire_result', {
                 attackerId: socket.id,
                 coordinate: { x: data.x, y: data.y },
                 confirmed: false
             });
+            
+            // Ensure switchTurn broadcasts nextPlayerId
             io.to(data.roomCode).emit('turn_change', { nextPlayerId: room.players[room.currentTurn].id });
         }
     });
@@ -420,8 +429,10 @@ io.on('connect', (socket) => {
         const room = rooms.get(data.roomCode);
         if (!room) return;
 
+        const attacker = room.players[room.currentTurn];
+
         if (data.isCorrect) {
-            const attacker = room.players[room.currentTurn];
+            // Correct: Add to hitCoordinates and broadcast confirmed: true. Do not swap turns.
             attacker.hitCoordinates.push(data.coordinate);
             
             io.to(data.roomCode).emit('fire_result', {
@@ -430,22 +441,22 @@ io.on('connect', (socket) => {
                 confirmed: true
             });
 
-            // Check Win Condition
+            // Check Win Condition (Total segments = 5+4+3+3+2 = 17)
             if (attacker.hitCoordinates.length === 17) {
                 io.to(data.roomCode).emit('gameOver', { winnerId: attacker.id, winnerName: attacker.username });
             }
-            // Do not swap turns on hit
         } else {
-            // Incorrect answer
-            const attacker = room.players[room.currentTurn];
+            // Incorrect: Do not add to hitCoordinates. Swap the turn first, then broadcast confirmed: false.
             attacker.missCoordinates.push(data.coordinate);
-
             room.currentTurn = (room.currentTurn + 1) % 2;
+            
             io.to(data.roomCode).emit('fire_result', {
-                attackerId: socket.id,
+                attackerId: attacker.id,
                 coordinate: data.coordinate,
                 confirmed: false
             });
+            
+            // Broadcast nextPlayerId
             io.to(data.roomCode).emit('turn_change', { nextPlayerId: room.players[room.currentTurn].id });
         }
     });

@@ -13,14 +13,21 @@ if (!apiKey) {
 
 // Initialize with explicit key
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); 
+const model = genAI.getGenerativeModel({ 
+  model: 'gemini-3-flash-preview',
+  generationConfig: {
+    maxOutputTokens: 2048, // Higher limit for 30 questions
+    temperature: 0.1, // Low temp for more stable JSON
+    responseMimeType: "application/json" // Native JSON mode
+  }
+}); 
 
 interface GeneratedQuestion {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   question_text: string;
   options: string[];
   correct_answer: string;
-  explanation: string;
+  explanation: string; // The Proof: Include the explanation field
 }
 
 interface QuestionGenerationResponse {
@@ -61,7 +68,7 @@ async function generateWithRetry(syllabusGeminiUri: string, prompt: string, retr
   let lastError: any;
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`🤖 Gemini Attempt ${i + 1}/${retries} using gemini-1.5-flash...`);
+      console.log(`🤖 Gemini Attempt ${i + 1}/${retries} using gemini-3-flash-preview...`);
       const result = await model.generateContent([
         {
           fileData: {
@@ -78,10 +85,19 @@ async function generateWithRetry(syllabusGeminiUri: string, prompt: string, retr
       const status = error.status || (error.response && error.response.status);
       console.error(`❌ Gemini Error (Attempt ${i + 1}):`, error.message || error);
       
-      // If it's a 404, maybe we need gemini-3-flash-preview as a fallback
+      // If it's a 404, maybe we need gemini-1.5-flash as a fallback if it was something else, 
+      // but here we are already using gemini-1.5-flash.
+      // The requirement mentions gemini 3 should not get stuck.
       if (status === 404 && i === 0) {
-        console.log("404 Error - falling back to gemini-3-flash-preview...");
-        const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+        console.log("404 Error - falling back to gemini-1.5-flash explicitly...");
+        const fallbackModel = genAI.getGenerativeModel({ 
+          model: 'gemini-1.5-flash',
+          generationConfig: {
+            maxOutputTokens: 2048,
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          }
+        });
         try {
           const result = await fallbackModel.generateContent([
             {
