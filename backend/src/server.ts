@@ -6,6 +6,7 @@ import cors from 'cors';
 import { Server, Socket } from 'socket.io';
 import { createServer } from 'http';
 import path from 'path';
+import { courseExists, registerUserToCourse, getUserIdByUsername, getCourseIdAndProfessorId } from './db/dbutils.js';
 
 // Initialize environment variables from .env file
 dotenv.config();
@@ -36,23 +37,23 @@ async function connectInfrastructure() {
     try {
         // 1. Connect to MongoDB
         await mongoose.connect(process.env.MONGO_URI!);
-        console.log('✅ Connected to MongoDB successfully.');
+        console.log('Connected to MongoDB successfully.');
 
         // 2. Connect to Redis
         await redisClient.connect();
-        console.log('✅ Connected to Redis successfully.');
+        console.log('Connected to Redis successfully.');
 
         // 3. Test Ollama Connection
         // We ping the /api/tags endpoint just to verify the service is awake and reachable
         const ollamaRes = await fetch(`${process.env.OLLAMA_HOST}/api/tags`);
         if (ollamaRes.ok) {
-            console.log('✅ Connected to Ollama successfully.');
+            console.log('Connected to Ollama successfully.');
         } else {
-            console.warn('⚠️ Ollama responded, but with an unexpected status.');
+            console.warn('Ollama responded, but with an unexpected status.');
         }
 
     } catch (error) {
-        console.error('❌ Failed to connect to infrastructure via VPN:', error);
+        console.error('Failed to connect to infrastructure via VPN:', error);
     }
 }
 
@@ -75,20 +76,38 @@ app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(import.meta.dirname, '../../frontend/dist/index.html'));
 });
 
-// --- START SERVER ---
-/*
-app.listen('0.0.0.0', async (port) => {
-    console.log(`Server listening on port ${port}`);
-    // Boot up the infrastructure connections right after the server starts listening
-    await connectInfrastructure();
-});
-*/
+interface RegisterCourseEvent {
+    username: string,
+    courseName: string,
+    profFirstName: string,
+    profLastName: string
+}
 
 // ---- SOCKET IO ----
 io.on('connect', (socket) => {
     console.log(`Connection from ${socket.id}`);
     
     // add listeners here...
+    
+    socket.on('joinRoom', (roomCode: string) => {
+        socket.join(roomCode);     
+    });
+    
+    socket.on('leaveRoom', (roomCode: string) => {
+        socket.join(roomCode);
+    });
+    
+    socket.on('registerCourse', async (data: RegisterCourseEvent) => {
+        // check to see if the room exists
+        const exists = await courseExists(data.courseName, data.profFirstName, data.profLastName);
+        if (exists) {
+            // course exists, register the user
+            const userId = await getUserIdByUsername(data.username);
+            const { courseId, professorId } = await getCourseIdAndProfessorId(data.courseName, data.profFirstName, data.profLastName);
+            
+            registerUserToCourse(userId!, courseId, professorId);
+        }
+    });
 
     socket.on('disconnect', (reason) => {
         console.log(`Client ${socket.id} disconnected for ${reason}`);  
