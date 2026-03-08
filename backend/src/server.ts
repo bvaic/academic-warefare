@@ -1,8 +1,11 @@
-import express from 'express';
+import express, { response } from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createClient } from 'redis';
 import cors from 'cors';
+import { Server, Socket } from 'socket.io';
+import { createServer } from 'http';
+import path from 'path';
 
 // Initialize environment variables from .env file
 dotenv.config();
@@ -10,9 +13,17 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: {
+        origin: 'http://127.0.0.1:5173' // vite
+    }
+});
+
 // Middleware
 app.use(cors()); // Allows your Vite frontend to talk to this API
 app.use(express.json()); // Allows the server to parse JSON request bodies
+app.use(express.static(path.join(import.meta.dirname, '../../frontend/dist')));
 
 // --- REDIS SETUP ---
 const redisClient = createClient({
@@ -46,8 +57,9 @@ async function connectInfrastructure() {
 }
 
 // --- ROUTES ---
+
 // A basic health-check route to verify everything from the browser
-app.get('/', (req, res) => {
+app.get('/status', (req, res) => {
     res.json({
         message: 'Academic Warfare API is online!',
         databaseStatus: {
@@ -58,9 +70,31 @@ app.get('/', (req, res) => {
     });
 });
 
+// serving the react build
+app.get(/(.*)/, (req, res) => {
+    res.sendFile(path.join(import.meta.dirname, '../../frontend/dist/index.html'));
+});
+
 // --- START SERVER ---
+/*
 app.listen('0.0.0.0', async (port) => {
-    console.log(`🚀 Server listening on port ${port}`);
+    console.log(`Server listening on port ${port}`);
     // Boot up the infrastructure connections right after the server starts listening
     await connectInfrastructure();
+});
+*/
+
+// ---- SOCKET IO ----
+io.on('connect', (socket) => {
+    console.log(`Connection from ${socket.id}`);
+    
+    // add listeners here...
+
+    socket.on('disconnect', (reason) => {
+        console.log(`Client ${socket.id} disconnected for ${reason}`);  
+    });
+});
+
+httpServer.listen(port, () => {
+    console.log(`Server running on port ${port}`);
 });
