@@ -31,8 +31,8 @@ An online platform where users can join courses alongside their peers to compete
 
 ### Prerequisites
 - Node.js 18+
-- MongoDB instance (or Docker container)
-- Redis instance (or Docker container)
+- MongoDB instance (e.g., local or Atlas)
+- Redis instance
 - Google Gemini API key
 - UTD Nebula API key
 
@@ -41,16 +41,60 @@ An online platform where users can join courses alongside their peers to compete
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd academic-warefare
+cd academic-warfare
 
-# Install backend dependencies
-cd backend
-npm install
-
-# Install frontend dependencies
-cd ../frontend
-npm install
+# Install dependencies for both backend and frontend
+cd backend && npm install
+cd ../frontend && npm install
 ```
+
+### 🎮 How to Start the Battleship Game
+
+#### Step 1: Configure Environment
+Ensure `backend/.env` has all required credentials:
+- `MONGO_URI` - MongoDB connection string
+- `REDIS_URL` - Redis connection string
+- `GEMINI_API_KEY` - Google Gemini API key
+- `NEBULA_API_KEY` - UTD Nebula API key
+
+#### Step 2: Start the Backend Server
+```bash
+cd backend
+npm run dev
+```
+The backend will start on `http://localhost:3001` with WebSocket support via Socket.io.
+
+#### Step 3: Start the Frontend Client
+```bash
+cd frontend
+npm run dev
+```
+The frontend will start on `http://localhost:5173` (accessible at `http://<HOST_IP>:5173` on your local network).
+
+**Note**: The frontend uses `--host` flag to allow access from other devices on the same network.
+
+#### Step 4: Connect Multiple Players
+1. **Find your host IP**: Run `ip addr` (Linux) or `ifconfig` (Mac/Linux) to find your local network IP (e.g., `192.168.1.10`)
+2. **Players connect**: All players navigate to `http://<HOST_IP>:5173` from their devices
+3. **Join the same room**: Both players must enter the **SAME 4-digit Room Code**
+4. **Enter game info**:
+   - **Username**: Your display name
+   - **Course Name**: e.g., "ITSS 4330"
+   - **Professor's First and Last Name**: e.g., "Dawn" and "Owens"
+
+#### Step 5: Game Begins
+- Once both players join, the backend RAG pipeline:
+  - Fetches the course syllabus from UTD Nebula API
+  - Generates 30 academic trivia questions using Google Gemini AI
+  - Initializes the battleship game state
+
+#### How to Play
+- **Ship Placement**: Ships are auto-placed on a 10x10 grid
+- **Combat**: Enter X and Y coordinates (0-9) to fire missiles at opponent's grid
+- **Hit Confirmation**: When you hit a ship, you must answer a trivia question correctly to confirm the hit
+- **Win Condition**: First player to sink all opponent ships wins
+
+**Technical Note**: The UI includes a global state unlocker to prevent freezes during combat resolution.
 
 ## 🔧 Backend Setup
 

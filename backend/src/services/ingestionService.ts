@@ -31,24 +31,32 @@ export async function ingestSyllabus(profId: string): Promise<string | null> {
     return null;
   }
 
-  console.log(`📥 Fetching syllabus for ${professor.first_name} ${professor.last_name}...`);
+  console.log(`📥 Ingesting syllabus for ${professor.first_name} ${professor.last_name}...`);
 
-  // Call getSyllabusUri
-  const syllabusUrl = await getSyllabusUri(
-    professor.course_prefix,
-    professor.course_number,
-    professor.first_name,
-    professor.last_name
-  );
+  // Check if we already have a source URL
+  let syllabusUrl = professor.syllabus_source_url;
+
+  if (syllabusUrl) {
+    console.log(`✓ Using existing syllabus source URL: ${syllabusUrl}`);
+  } else {
+    // If not, fetch from Nebula API
+    console.log(`📥 Fetching syllabus from Nebula API...`);
+    syllabusUrl = await getSyllabusUri(
+      professor.first_name,
+      professor.last_name
+    );
+
+    if (syllabusUrl) {
+      // Update the Professor with syllabus_source_url for next time
+      professor.syllabus_source_url = syllabusUrl;
+      await professor.save();
+      console.log(`✓ Syllabus URL saved to database: ${syllabusUrl}`);
+    }
+  }
 
   if (!syllabusUrl) {
     throw new Error(`No syllabus URL found for ${profId}`);
   }
-
-  // Update the Professor with syllabus_source_url
-  professor.syllabus_source_url = syllabusUrl;
-  await professor.save();
-  console.log(`✓ Syllabus URL saved: ${syllabusUrl}`);
 
   // Download the PDF
   const filePath = await downloadPDF(syllabusUrl, profId);
@@ -57,6 +65,9 @@ export async function ingestSyllabus(profId: string): Promise<string | null> {
   // Upload to Gemini File API
   const geminiUri = await uploadToGemini(filePath, profId);
   console.log(`✓ Uploaded to Gemini: ${geminiUri}`);
+
+  // Wait for file to become active
+  await waitForFileActive(geminiUri);
 
   // Update Professor with Gemini URI
   professor.syllabus_gemini_uri = geminiUri;
@@ -91,6 +102,7 @@ async function downloadPDF(url: string, profId: string): Promise<string> {
   }
 
   // Stream the PDF to disk
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const readableStream = Readable.fromWeb(response.body as any);
   const writeStream = createWriteStream(filePath);
 
@@ -106,4 +118,29 @@ async function uploadToGemini(filePath: string, profId: string): Promise<string>
   });
 
   return uploadResult.file.uri;
+}
+
+async function waitForFileActive(fileUri: string) {
+  const fileId = fileUri.split('/').pop();
+  if (!fileId) throw new Error('Invalid file URI');
+
+  console.log(`⏳ Waiting for Gemini file to be ACTIVE...`);
+  
+  for (let i = 0; i < 10; i++) {
+    const file = await fileManager.getFile(`files/${fileId}`);
+    console.log(`File state: ${file.state}`);
+    
+    if (file.state === 'ACTIVE') {
+      console.log(`✓ File is now ACTIVE`);
+      return;
+    }
+    
+    if (file.state === 'FAILED') {
+      throw new Error(`Gemini file processing FAILED`);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  
+  throw new Error('Timeout waiting for Gemini file to be ACTIVE');
 }

@@ -28,6 +28,7 @@ export interface IProfessor {
   last_name: string;
   course_prefix: string;
   course_number: string;
+  email?: string;
   syllabus_source_url: string | null;
   syllabus_gemini_uri: string | null;
   user_note_id: string[];
@@ -78,6 +79,7 @@ const ProfessorSchema = new Schema({
   last_name: { type: String, required: true },
   course_prefix: { type: String, required: true },
   course_number: { type: String, required: true },
+  email: { type: String, default: '' },
   syllabus_source_url: { type: String, default: null },
   syllabus_gemini_uri: { type: String, default: null },
   user_note_id: [{ type: String, ref: 'UserNote' }]
