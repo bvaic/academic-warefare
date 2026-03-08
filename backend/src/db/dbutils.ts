@@ -8,18 +8,18 @@ export async function courseExists(
 ): Promise<boolean> {
 
     const matchingCourses = await Course.find({
-        course_name: courseName, 
-    }).populate('professor_id');
+        course_name: { $regex: new RegExp(`^${courseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }, 
+    }).populate('prof_id');
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const exists = matchingCourses.some((course: any) => {
-        const professor = course.professor_id;
+        const professor = course.prof_id;
 
         // professor must exist and match both names
         return (
             professor &&
-            professor.first_name === profFirstName &&
-            professor.last_name === profLastName
+            professor.first_name.toLowerCase() === profFirstName.toLowerCase() &&
+            professor.last_name.toLowerCase() === profLastName.toLowerCase()
         );
     });
     
@@ -76,21 +76,22 @@ export async function getCourseIdAndProfessorId(
     profLastName: string
 ){
     const matchingCourses = await Course.find({
-        course_name: courseName, 
-    }).populate('professor_id');
+        course_name: { $regex: new RegExp(`^${courseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }, 
+    }).populate('prof_id');
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const exists = matchingCourses.some((course: any) => {
-        const professor = course.professor_id;
+    for (const course of matchingCourses as any[]) {
+        const professor = course.prof_id;
         
-        if (professor.first_name === profFirstName && professor.last_name === profLastName) {
-            // professor must exist and match both names
+        if (professor && 
+            professor.first_name.toLowerCase() === profFirstName.toLowerCase() && 
+            professor.last_name.toLowerCase() === profLastName.toLowerCase()) {
             return {
                 courseId: course._id,
-                professorId: course.professor_id
+                professorId: professor._id
             };
         }
-    });
+    }
     
     return { courseId: '', professorId: '' };
 }

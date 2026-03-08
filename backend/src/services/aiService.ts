@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Question } from '../db/models.js';
 import { randomUUID } from 'crypto';
 
@@ -12,7 +12,8 @@ if (!apiKey) {
 }
 
 // Initialize with explicit key
-const ai = new GoogleGenAI({ apiKey });
+const genAI = new GoogleGenerativeAI(apiKey);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); 
 
 interface GeneratedQuestion {
   difficulty: 'Easy' | 'Medium' | 'Hard';
@@ -55,29 +56,77 @@ Return ONLY a raw JSON object. Do not use markdown blocks (\`\`\`json). Structur
     }
   ]
 }`;
+
+async function generateWithRetry(syllabusGeminiUri: string, prompt: string, retries = 5): Promise<string> {
+  let lastError: any;
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`🤖 Gemini Attempt ${i + 1}/${retries} using gemini-1.5-flash...`);
+      const result = await model.generateContent([
+        {
+          fileData: {
+            mimeType: 'application/pdf',
+            fileUri: syllabusGeminiUri
+          }
+        },
+        { text: prompt }
+      ]);
+      const response = await result.response;
+      return response.text() || '';
+    } catch (error: any) {
+      lastError = error;
+      const status = error.status || (error.response && error.response.status);
+      console.error(`❌ Gemini Error (Attempt ${i + 1}):`, error.message || error);
+      
+      // If it's a 404, maybe we need gemini-3-flash-preview as a fallback
+      if (status === 404 && i === 0) {
+        console.log("404 Error - falling back to gemini-3-flash-preview...");
+        const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+        try {
+          const result = await fallbackModel.generateContent([
+            {
+              fileData: {
+                mimeType: 'application/pdf',
+                fileUri: syllabusGeminiUri
+              }
+            },
+            { text: prompt }
+          ]);
+          const response = await result.response;
+          return response.text() || '';
+        } catch (innerError: any) {
+            console.error("❌ Fallback Gemini Error:", innerError.message || innerError);
+            // continue with the original retry loop
+        }
+      }
+
+      // If it's 429 (Rate Limit) or 503 (Overloaded), wait longer
+      if (status === 429 || status === 503) {
+        const delay = Math.pow(2, i) * 5000 + Math.random() * 1000;
+        console.log(`⏳ Rate limited or overloaded. Waiting ${Math.round(delay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function generateQuestions(syllabusGeminiUri: string, profId: string): Promise<void> {
+  // Check if questions already exist
+  const existingCount = await Question.countDocuments({ prof_id: profId });
+  if (existingCount >= 30) {
+    console.log(`✓ Already have ${existingCount} questions for ${profId}`);
+    return;
+  }
+
   console.log(`🤖 Generating questions for ${profId}...`);
 
-  // Generate content using the API
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            fileData: {
-              mimeType: 'application/pdf',
-              fileUri: syllabusGeminiUri
-            }
-          },
-          { text: QUESTION_GENERATION_PROMPT }
-        ]
-      }
-    ]
-  });
-
-  const text = response.text || '';
+  const text = await generateWithRetry(syllabusGeminiUri, QUESTION_GENERATION_PROMPT);
 
   console.log(`✓ Received response from Gemini`);
 
@@ -89,7 +138,7 @@ export async function generateQuestions(syllabusGeminiUri: string, profId: strin
     parsedResponse = JSON.parse(cleanText) as QuestionGenerationResponse;
   } catch (error) {
     console.error('Failed to parse JSON response:', text);
-    throw new Error('Invalid JSON response from Gemini');
+    throw new Error('Invalid JSON response from Gemini', { cause: error });
   }
 
   if (!parsedResponse.questions || !Array.isArray(parsedResponse.questions)) {
